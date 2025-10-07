@@ -302,6 +302,82 @@ class LighterClient(BaseExchangeClient):
         order_result = await self._submit_order_with_retry(order_params)
         return order_result
 
+    async def place_market_order(self, contract_id: str, quantity: Decimal, direction: str) -> OrderResult:
+        """Place a market order with Lighter using official SDK."""
+        # Ensure client is initialized
+        if self.lighter_client is None:
+            await self._initialize_lighter_client()
+
+        # Reset current order tracking
+        self.current_order = None
+        self.current_order_client_id = None
+
+        # Determine order side and corresponding price reference
+        best_bid, best_ask = await self.fetch_bbo_prices(contract_id)
+        if direction.lower() == 'buy':
+            is_ask = False
+            execution_price = best_ask
+        elif direction.lower() == 'sell':
+            is_ask = True
+            execution_price = best_bid
+        else:
+            raise Exception(f"Invalid direction: {direction}")
+
+        # Generate unique client order index
+        client_order_index = int(time.time() * 1000) % 1000000
+        self.current_order_client_id = client_order_index
+
+        order_params = {
+            'market_index': self.config.contract_id,
+            'client_order_index': client_order_index,
+            'base_amount': int(quantity * self.base_amount_multiplier),
+            'price': int(execution_price * self.price_multiplier),
+            'is_ask': is_ask,
+            'order_type': self.lighter_client.ORDER_TYPE_MARKET,
+            'time_in_force': self.lighter_client.ORDER_TIME_IN_FORCE_IMMEDIATE_OR_CANCEL,
+            'reduce_only': True,
+            'trigger_price': 0,
+        }
+
+        order_result = await self._submit_order_with_retry(order_params)
+        if not order_result.success:
+            return order_result
+
+        # Wait for websocket update to provide final order status
+        start_time = time.time()
+        order_status = 'OPEN'
+        filled_size = Decimal('0')
+        executed_price = Decimal(execution_price)
+
+        while time.time() - start_time < 10 and order_status != 'FILLED':
+            await asyncio.sleep(0.1)
+            if self.current_order is not None:
+                order_status = self.current_order.status
+                filled_size = self.current_order.filled_size
+                executed_price = self.current_order.price
+
+        if order_status != 'FILLED':
+            self.logger.log(f"Market order failed with status: {order_status}", "ERROR")
+            return OrderResult(
+                success=False,
+                order_id=order_result.order_id,
+                side=direction.lower(),
+                size=quantity,
+                price=Decimal(execution_price),
+                status=order_status,
+                error_message=f"Market order not filled within timeout: {order_status}"
+            )
+
+        return OrderResult(
+            success=True,
+            order_id=self.current_order.order_id,
+            side=direction.lower(),
+            size=filled_size if filled_size > 0 else quantity,
+            price=executed_price,
+            status=order_status,
+            filled_size=filled_size
+        )
+
     async def place_open_order(self, contract_id: str, quantity: Decimal, direction: str) -> OrderResult:
         """Place an open order with Lighter using official SDK."""
 
