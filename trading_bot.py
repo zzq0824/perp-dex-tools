@@ -325,10 +325,9 @@ class TradingBot:
             if self.order_filled_amount > 0:
                 close_side = self.config.close_order_side
                 if self.config.boost_mode:
-                    close_order_result = await self.exchange_client.place_close_order(
+                    close_order_result = await self.exchange_client.place_market_order(
                         self.config.contract_id,
                         self.order_filled_amount,
-                        filled_price,
                         close_side
                     )
                 else:

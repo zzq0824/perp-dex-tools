@@ -90,9 +90,9 @@ async def main():
     # Setup logging first
     setup_logging("WARNING")
 
-    # Validate boost-mode can only be used with aster and backpack exchange
-    if args.boost and args.exchange.lower() != 'aster' and args.exchange.lower() != 'backpack':
-        print(f"Error: --boost can only be used when --exchange is 'aster' or 'backpack'. "
+    # Validate boost-mode can only be used with aster, backpack and lighter exchange
+    if (args.boost and args.exchange.lower() not in ['aster', 'backpack', 'lighter']):
+        print(f"Error: --boost can only be used when --exchange is 'aster', 'backpack' or 'lighter'. "
               f"Current exchange: {args.exchange}")
         sys.exit(1)
 
