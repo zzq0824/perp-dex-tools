@@ -399,6 +399,21 @@ class LighterClient(BaseExchangeClient):
             if self.current_order is not None:
                 order_status = self.current_order.status
 
+        if self.current_order is None:
+            self.logger.log(
+                "[OPEN] No WebSocket update received for placed order; "
+                "returning optimistic OPEN status.",
+                "WARNING",
+            )
+            return OrderResult(
+                success=True,
+                order_id=order_result.order_id,
+                side=direction,
+                size=quantity,
+                price=order_price,
+                status='OPEN'
+            )
+
         return OrderResult(
             success=True,
             order_id=self.current_order.order_id,
